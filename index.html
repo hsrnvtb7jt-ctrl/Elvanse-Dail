@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Elvanse">
+<title>Elvanse Tagebuch</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  /* Offline font fallback */
+  @media (prefers-reduced-data: reduce) {
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; }
+  }
+</style>
+<link rel="manifest" id="manifest-placeholder">
+<script>
+// Inline Web App Manifest
+const manifest = {
+  name: "Elvanse Tagebuch",
+  short_name: "Elvanse",
+  start_url: ".",
+  display: "standalone",
+  background_color: "#F7F6F2",
+  theme_color: "#1D9E75",
+  icons: [{
+    src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%231D9E75'/%3E%3Ctext x='50%25' y='58%25' font-size='300' text-anchor='middle' dominant-baseline='middle' fill='white'%3E💊%3C/text%3E%3C/svg%3E",
+    sizes: "512x512",
+    type: "image/svg+xml"
+  }]
+};
+const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+document.getElementById('manifest-placeholder').href = URL.createObjectURL(blob);
+
+// Inline Service Worker via blob
+const swCode = `
+const CACHE = 'elvanse-v1';
+const ASSETS = [self.location.href];
+
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(cache => {
+      return fetch(self.location.href).then(r => cache.put(self.location.href, r)).catch(()=>{});
+    }).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      if (cached) return cached;
+      return fetch(e.request).then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE).then(cache => cache.put(e.request, clone));
+        }
+        return response;
+      }).catch(() => cached);
+    })
+  );
+});
+`;
+const swBlob = new Blob([swCode], {type: 'application/javascript'});
+const swUrl = URL.createObjectURL(swBlob);
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(swUrl).catch(() => {});
+  });
+}
+</script>
+<style>
+  :root {
+    --green: #1D9E75;
+    --green-light: #E1F5EE;
+    --green-dark: #0F6E56;
+    --amber: #EF9F27;
+    --amber-light: #FAEEDA;
+    --amber-dark: #854F0B;
+    --bg: #F7F6F2;
+    --card: #FFFFFF;
+    --text: #1a1a18;
+    --text-muted: #6b6b66;
+    --text-faint: #a0a09a;
+    --border: rgba(0,0,0,0.08);
+    --border-med: rgba(0,0,0,0.14);
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); }
+
+  /* App shell */
+  .app { max-width: 430px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* Header */
+  .header { padding: 56px 20px 16px; background: var(--bg); position: sticky; top: 0; z-index: 10; }
+  .header-top { display: flex; align-items: flex-start; justify-content: space-between; }
+  .header h1 { font-family: 'DM Serif Display', serif; font-size: 28px; font-weight: 400; letter-spacing: -0.5px; line-height: 1.1; }
+  .header h1 span { color: var(--green); }
+  .date-badge { font-size: 11px; color: var(--text-muted); background: var(--card); border: 0.5px solid var(--border-med); border-radius: 20px; padding: 5px 10px; white-space: nowrap; margin-top: 4px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 6px; padding: 12px 20px 0; }
+  .tab { flex: 1; padding: 9px 0; border-radius: 20px; border: 0.5px solid var(--border-med); background: none; font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; color: var(--text-muted); transition: all 0.18s; font-weight: 400; }
+  .tab.active { background: var(--text); color: var(--bg); border-color: transparent; font-weight: 500; }
+
+  /* Scroll area */
+  .scroll { flex: 1; overflow-y: auto; padding: 14px 20px 40px; -webkit-overflow-scrolling: touch; }
+
+  /* Cards */
+  .card { background: var(--card); border-radius: var(--radius); border: 0.5px solid var(--border); padding: 16px 18px; margin-bottom: 10px; }
+  .card-title { font-size: 10px; font-weight: 500; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }
+
+  /* Checklist */
+  .check-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 0.5px solid var(--border); cursor: pointer; user-select: none; }
+  .check-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .check-row:first-child { padding-top: 0; }
+  .chk { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--border-med); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
+  .chk.on { background: var(--green); border-color: var(--green); }
+  .chk.on::after { content: ''; display: block; width: 5px; height: 9px; border: 2px solid white; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px,-1px); }
+  .chk-label { font-size: 14px; color: var(--text-muted); flex: 1; line-height: 1.4; transition: color 0.15s; }
+  .chk-label.on { color: var(--text); }
+  .chk-tag { font-size: 10px; color: var(--text-faint); background: var(--bg); border-radius: 4px; padding: 2px 6px; flex-shrink: 0; }
+
+  /* Mood */
+  .mood-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .mood-btn { padding: 10px 4px 8px; border: 0.5px solid var(--border); border-radius: var(--radius-sm); background: none; cursor: pointer; text-align: center; transition: all 0.15s; font-family: 'DM Sans', sans-serif; }
+  .mood-btn:active { transform: scale(0.95); }
+  .mood-btn.on { border: 2px solid var(--green); background: var(--green-light); }
+  .mood-emoji { font-size: 22px; display: block; }
+  .mood-label { font-size: 10px; color: var(--text-faint); display: block; margin-top: 3px; }
+
+  /* Scales */
+  .scale-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+  .scale-row:last-child { border-bottom: none; }
+  .scale-name { font-size: 13px; color: var(--text-muted); width: 110px; flex-shrink: 0; }
+  input[type=range] { flex: 1; accent-color: var(--green); height: 4px; }
+  .scale-val { font-size: 13px; font-weight: 500; color: var(--text); width: 24px; text-align: right; }
+
+  /* Notes */
+  textarea { width: 100%; border: none; outline: none; font-size: 14px; color: var(--text); background: none; resize: none; min-height: 70px; font-family: 'DM Sans', sans-serif; line-height: 1.6; }
+  textarea::placeholder { color: var(--text-faint); }
+
+  /* Buttons */
+  .btn-save { width: 100%; padding: 14px; background: var(--green); color: white; border: none; border-radius: var(--radius); font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; letter-spacing: 0.01em; transition: background 0.15s; margin-top: 6px; }
+  .btn-save:active { background: var(--green-dark); }
+
+  .btn-fazit { width: 100%; padding: 13px; background: none; color: var(--text); border: 0.5px solid var(--border-med); border-radius: var(--radius); font-size: 14px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+  .btn-fazit:active { background: var(--border); }
+
+  /* History */
+  .h-entry { padding: 12px 0; border-bottom: 0.5px solid var(--border); }
+  .h-entry:last-child { border-bottom: none; }
+  .h-date { font-size: 11px; color: var(--text-faint); margin-bottom: 4px; }
+  .h-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .h-pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; }
+  .h-green { background: var(--green-light); color: var(--green-dark); }
+  .h-amber { background: var(--amber-light); color: var(--amber-dark); }
+  .h-gray { background: var(--bg); color: var(--text-muted); border: 0.5px solid var(--border); }
+  .h-notes { font-size: 12px; color: var(--text-faint); margin-top: 4px; line-height: 1.4; }
+
+  /* Fazit modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; align-items: flex-end; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--card); border-radius: 24px 24px 0 0; padding: 24px 20px 40px; width: 100%; max-height: 80vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .modal-handle { width: 36px; height: 4px; background: var(--border-med); border-radius: 2px; margin: 0 auto 20px; }
+  .modal-title { font-family: 'DM Serif Display', serif; font-size: 22px; font-weight: 400; margin-bottom: 16px; }
+  .fazit-text { font-size: 14px; line-height: 1.75; color: var(--text-muted); white-space: pre-wrap; }
+  .fazit-loading { display: flex; align-items: center; gap: 10px; color: var(--text-faint); font-size: 14px; padding: 20px 0; }
+  .dot-pulse { display: flex; gap: 4px; }
+  .dot-pulse span { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 1.2s infinite; }
+  .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+  .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse { 0%,80%,100% { opacity: 0.2; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+  .modal-close { width: 100%; padding: 13px; background: var(--bg); border: none; border-radius: var(--radius-sm); font-size: 14px; font-family: 'DM Sans', sans-serif; cursor: pointer; color: var(--text-muted); margin-top: 20px; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 20px; border-radius: 20px; font-size: 13px; display: none; z-index: 200; white-space: nowrap; }
+
+  /* API key prompt */
+  .apikey-card { background: #FAEEDA; border-radius: var(--radius); padding: 16px 18px; margin-bottom: 10px; border: 0.5px solid rgba(239,159,39,0.3); }
+  .apikey-card p { font-size: 13px; color: #633806; line-height: 1.5; margin-bottom: 10px; }
+  .apikey-card input { width: 100%; padding: 10px 12px; border: 0.5px solid rgba(239,159,39,0.4); border-radius: var(--radius-sm); font-size: 13px; font-family: 'DM Sans', sans-serif; background: white; color: var(--text); outline: none; }
+  .apikey-card input::placeholder { color: var(--text-faint); }
+  .btn-apikey { margin-top: 8px; width: 100%; padding: 10px; background: var(--amber); color: white; border: none; border-radius: var(--radius-sm); font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; font-weight: 500; }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--text-faint); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-top">
+      <h1>Elvanse<br><span>Tagebuch</span></h1>
+      <div class="date-badge" id="date-badge"></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('today')">Heute</button>
+    <button class="tab" onclick="showTab('history')">Verlauf</button>
+    <button class="tab" onclick="showTab('settings')">Einstellungen</button>
+  </div>
+
+  <!-- TODAY -->
+  <div class="scroll" id="tab-today">
+
+    <div class="card">
+      <div class="card-title">Einnahme & Basics</div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Elvanse eingenommen</div><div class="chk-tag">morgens</div></div>
+      <div class="check-row" id="row-einnahmezeit" onclick="toggleWithTime(this, 'einnahmezeit-wrap')"><div class="chk"></div><div class="chk-label">Einnahmezeit notiert</div><input type="time" id="einnahme-time" onclick="event.stopPropagation()" style="display:none; border:0.5px solid var(--border-med); border-radius:6px; padding:3px 7px; font-size:13px; font-family:'DM Sans',sans-serif; color:var(--text); background:var(--bg); outline:none;"></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Frühstück gegessen</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Genug Wasser getrunken (min. 1,5 L)</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Wirkung beobachten</div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Wirkungsbeginn spürbar</div><div class="chk-tag">~1–2 h</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Konzentration verbessert</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Aufgaben angehen fiel leichter</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Wirkungsende bemerkt</div><div class="chk-tag">Uhrzeit</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Nebenwirkungen</div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Appetitmangel / wenig Hunger</div></div>
+      <div class="check-row" onclick="toggleWithTime(this, 'puls-wrap')"><div class="chk"></div><div class="chk-label">Herzrasen / erhöhter Puls</div><div style="display:flex;align-items:center;gap:4px"><input type="number" id="puls-input" onclick="event.stopPropagation()" min="40" max="220" placeholder="bpm" style="display:none; width:62px; border:0.5px solid var(--border-med); border-radius:6px; padding:3px 7px; font-size:13px; font-family:'DM Sans',sans-serif; color:var(--text); background:var(--bg); outline:none;"><span id="puls-unit" style="display:none; font-size:11px; color:var(--text-faint);">bpm</span></div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Mundtrockenheit</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Kopfschmerzen</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Schlafprobleme / Unruhe abends</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Stimmungstief nach Wirkungsende (Rebound)</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Libidoveränderung</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Wie fühle ich mich heute?</div>
+      <div class="mood-grid">
+        <button class="mood-btn" onclick="setMood(this,1)"><span class="mood-emoji">😞</span><span class="mood-label">Schlecht</span></button>
+        <button class="mood-btn" onclick="setMood(this,2)"><span class="mood-emoji">😐</span><span class="mood-label">Ok</span></button>
+        <button class="mood-btn" onclick="setMood(this,3)"><span class="mood-emoji">🙂</span><span class="mood-label">Gut</span></button>
+        <button class="mood-btn" onclick="setMood(this,4)"><span class="mood-emoji">😄</span><span class="mood-label">Sehr gut</span></button>
+      </div>
+      <div style="margin-top: 14px;">
+        <div class="scale-row"><div class="scale-name">Konzentration</div><input type="range" min="1" max="10" value="5" step="1" oninput="document.getElementById('vk').textContent=this.value"><div class="scale-val" id="vk">5</div></div>
+        <div class="scale-row"><div class="scale-name">Energie</div><input type="range" min="1" max="10" value="5" step="1" oninput="document.getElementById('ve').textContent=this.value"><div class="scale-val" id="ve">5</div></div>
+        <div class="scale-row"><div class="scale-name">Stimmung</div><input type="range" min="1" max="10" value="5" step="1" oninput="document.getElementById('vs').textContent=this.value"><div class="scale-val" id="vs">5</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Notizen & Beobachtungen</div>
+      <textarea id="notes-input" placeholder="Was ist aufgefallen? Fragen für den Arzt, besondere Erlebnisse..."></textarea>
+    </div>
+
+    <button class="btn-save" onclick="saveDay()">Tag speichern</button>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="scroll" id="tab-history" style="display:none">
+    <button class="btn-fazit" onclick="openFazit()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M22 12a10 10 0 0 0-10-10"/><circle cx="12" cy="12" r="3"/></svg>
+      KI-Fazit anfordern
+    </button>
+    <div id="history-list"></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="scroll" id="tab-settings" style="display:none">
+    <div class="apikey-card">
+      <p>Für das KI-Fazit benötigst du einen Anthropic API-Key. Dieser wird nur lokal auf deinem Gerät gespeichert.</p>
+      <input type="password" id="apikey-input" placeholder="sk-ant-..." value="">
+      <button class="btn-apikey" onclick="saveApiKey()">API-Key speichern</button>
+    </div>
+    <div class="card" style="margin-top: 4px;">
+      <div class="card-title">API-Key erhalten</div>
+      <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+        1. Gehe zu <strong>console.anthropic.com</strong><br>
+        2. Erstelle ein Konto (kostenlos)<br>
+        3. Unter „API Keys" einen neuen Key erstellen<br>
+        4. Key hier einfügen und speichern
+      </p>
+    </div>
+    <div class="card" style="margin-top: 4px;">
+      <div class="card-title">Daten löschen</div>
+      <button onclick="clearData()" style="font-size: 13px; color: #A32D2D; background: none; border: 0.5px solid rgba(163,45,45,0.3); border-radius: var(--radius-sm); padding: 8px 14px; cursor: pointer; font-family: 'DM Sans', sans-serif;">Alle Einträge löschen</button>
+    </div>
+  </div>
+</div>
+
+<!-- FAZIT MODAL -->
+<div class="modal-overlay" id="modal" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Dein Fazit</div>
+    <div id="fazit-content">
+      <div class="fazit-loading">
+        <div class="dot-pulse"><span></span><span></span><span></span></div>
+        Wird erstellt...
+      </div>
+    </div>
+    <button class="modal-close" onclick="closeFazit()">Schließen</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MOODLABELS = ['','Schlecht','Ok','Gut','Sehr gut'];
+let selectedMood = 0;
+let entries = [];
+
+function load() {
+  try { entries = JSON.parse(localStorage.getItem('elvanse_v2') || '[]'); } catch(e) { entries = []; }
+  const key = localStorage.getItem('elvanse_apikey') || '';
+  if (key) document.getElementById('apikey-input').value = key;
+}
+load();
+
+document.getElementById('date-badge').textContent = new Date().toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
+
+function showTab(name) {
+  ['today','history','settings'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t === name ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', ['today','history','settings'][i] === name);
+  });
+  if (name === 'history') renderHistory();
+}
+
+function toggle(row) {
+  row.querySelector('.chk').classList.toggle('on');
+  row.querySelector('.chk-label').classList.toggle('on');
+}
+
+function toggleWithTime(row, _unused) {
+  const chk = row.querySelector('.chk');
+  const label = row.querySelector('.chk-label');
+  chk.classList.toggle('on');
+  label.classList.toggle('on');
+  const isOn = chk.classList.contains('on');
+  const timeInput = row.querySelector('input[type=time]');
+  const numInput = row.querySelector('input[type=number]');
+  const unit = row.querySelector('#puls-unit');
+  if (timeInput) {
+    timeInput.style.display = isOn ? 'inline-block' : 'none';
+    if (isOn && !timeInput.value) {
+      const now = new Date();
+      timeInput.value = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    }
+  }
+  if (numInput) { numInput.style.display = isOn ? 'inline-block' : 'none'; if (isOn) setTimeout(()=>numInput.focus(),50); }
+  if (unit) unit.style.display = isOn ? 'inline' : 'none';
+}
+
+function setMood(btn, val) {
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  selectedMood = val;
+}
+
+function saveDay() {
+  const today = new Date().toISOString().split('T')[0];
+  const checks = [...document.querySelectorAll('.check-row')].map(r => ({
+    label: r.querySelector('.chk-label').textContent,
+    checked: r.querySelector('.chk').classList.contains('on')
+  }));
+  const entry = {
+    date: today,
+    dateLabel: new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }),
+    mood: selectedMood,
+    moodLabel: MOODLABELS[selectedMood] || '–',
+    konz: document.getElementById('vk').textContent,
+    energie: document.getElementById('ve').textContent,
+    stimmung: document.getElementById('vs').textContent,
+    notes: document.getElementById('notes-input').value.trim(),
+    einnahmezeit: document.getElementById('einnahme-time').value || '',
+    puls: document.getElementById('puls-input').value || '',
+    checks
+  };
+  entries = entries.filter(e => e.date !== today);
+  entries.unshift(entry);
+  try { localStorage.setItem('elvanse_v2', JSON.stringify(entries)); } catch(e) {}
+  showToast('Tag gespeichert ✓');
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (!entries.length) {
+    list.innerHTML = '<div class="empty-state">Noch keine Einträge.<br>Fülle heute deinen ersten Tag aus!</div>';
+    return;
+  }
+  list.innerHTML = entries.map(e => {
+    const nw = (e.checks||[]).filter(c => c.checked && ['Herzrasen','Kopfschmerzen','Schlafprob','Appetit','Mundtrocken','Rebound'].some(k => c.label.includes(k))).length;
+    const done = (e.checks||[]).filter(c=>c.checked).length;
+    return `<div class="h-entry">
+      <div class="h-date">${e.dateLabel || e.date}</div>
+      <div class="h-row">
+        ${e.moodLabel ? `<span class="h-pill h-green">${e.moodLabel}</span>` : ''}
+        ${e.einnahmezeit ? `<span class="h-pill h-gray">⏰ ${e.einnahmezeit} Uhr</span>` : ''}
+        <span class="h-pill h-gray">Konz. ${e.konz}/10</span>
+        <span class="h-pill h-gray">Energie ${e.energie}/10</span>
+        ${e.puls ? `<span class="h-pill h-amber">♥ ${e.puls} bpm</span>` : ''}
+        ${nw > 0 ? `<span class="h-pill h-amber">${nw} Nebenwirkung${nw>1?'en':''}</span>` : ''}
+        <span class="h-pill h-gray">${done} Checks</span>
+      </div>
+      ${e.notes ? `<div class="h-notes">${e.notes.slice(0,120)}${e.notes.length>120?'…':''}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2200);
+}
+
+function saveApiKey() {
+  const key = document.getElementById('apikey-input').value.trim();
+  if (!key) return;
+  localStorage.setItem('elvanse_apikey', key);
+  showToast('API-Key gespeichert ✓');
+}
+
+function clearData() {
+  if (confirm('Wirklich alle Einträge löschen?')) {
+    localStorage.removeItem('elvanse_v2');
+    entries = [];
+    showToast('Alle Einträge gelöscht');
+  }
+}
+
+async function openFazit() {
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('fazit-content').innerHTML = `<div class="fazit-loading"><div class="dot-pulse"><span></span><span></span><span></span></div>Wird erstellt...</div>`;
+
+  const apiKey = localStorage.getItem('elvanse_apikey') || '';
+  if (!apiKey) {
+    document.getElementById('fazit-content').innerHTML = `<p class="fazit-text">Bitte trage zuerst deinen Anthropic API-Key unter <strong>Einstellungen</strong> ein, um das KI-Fazit nutzen zu können.</p>`;
+    return;
+  }
+
+  if (!entries.length) {
+    document.getElementById('fazit-content').innerHTML = `<p class="fazit-text">Noch keine Einträge vorhanden. Fülle erst ein paar Tage aus!</p>`;
+    return;
+  }
+
+  const summary = entries.slice(0, 14).map(e => {
+    const nw = (e.checks||[]).filter(c=>c.checked && ['Herzrasen','Kopfschmerzen','Schlafprob','Appetit','Mundtrocken','Rebound'].some(k=>c.label.includes(k))).map(c=>c.label);
+    return `${e.dateLabel||e.date}: Stimmung=${e.moodLabel}, Konzentration=${e.konz}/10, Energie=${e.energie}/10, Stimmungsskala=${e.stimmung}/10${e.einnahmezeit?', Einnahme um '+e.einnahmezeit+' Uhr':''}${e.puls?', Puls='+e.puls+' bpm':''}${nw.length?', Nebenwirkungen: '+nw.join(', '):''}${e.notes?', Notiz: '+e.notes:''}`;
+  }).join('\n');
+
+  const prompt = `Du bist ein einfühlsamer medizinischer Assistent. Ich führe ein Tagebuch über mein Elvanse (Lisdexamfetamin)-Medikament. Hier sind meine Einträge der letzten Tage:\n\n${summary}\n\nBitte gib mir ein kurzes, persönliches Fazit (ca. 150–200 Wörter) auf Deutsch. Gehe ein auf: 1) Wie sich die Wirkung entwickelt, 2) Auffällige Muster bei Nebenwirkungen, 3) Was ich beim nächsten Arztgespräch ansprechen könnte. Schreibe direkt und freundlich, ohne Überschriften.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const text = data.content?.[0]?.text || 'Keine Antwort erhalten.';
+    document.getElementById('fazit-content').innerHTML = `<p class="fazit-text">${text.replace(/\n/g,'<br>')}</p>`;
+  } catch(err) {
+    document.getElementById('fazit-content').innerHTML = `<p class="fazit-text" style="color:#A32D2D">Fehler: ${err.message}<br><br>Bitte überprüfe deinen API-Key in den Einstellungen.</p>`;
+  }
+}
+
+function closeFazit() { document.getElementById('modal').classList.remove('open'); }
+function closeModalOutside(e) { if (e.target === document.getElementById('modal')) closeFazit(); }
+</script>
+</body>
+</html>
