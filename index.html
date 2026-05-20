@@ -201,7 +201,10 @@ if ('serviceWorker' in navigator) {
   <div class="header">
     <div class="header-top">
       <h1>Elvanse<br><span>Tagebuch</span></h1>
-      <div class="date-badge" id="date-badge"></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <div class="date-badge" id="date-badge"></div>
+        <input type="date" id="entry-date" onchange="onDateChange()" style="font-size:11px;color:var(--text-muted);background:var(--card);border:0.5px solid var(--border-med);border-radius:20px;padding:4px 10px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer;">
+      </div>
     </div>
   </div>
 
@@ -261,7 +264,60 @@ if ('serviceWorker' in navigator) {
       <textarea id="notes-input" placeholder="Was ist aufgefallen? Fragen für den Arzt, besondere Erlebnisse..."></textarea>
     </div>
 
-    <button class="btn-save" onclick="saveDay()">Tag speichern</button>
+    <div class="card">
+      <div class="card-title">Supplemente heute</div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Magnesium</div><div class="chk-tag">abends</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Omega-3</div><div class="chk-tag">morgens</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Zink</div><div class="chk-tag">morgens</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Vitamin D3 + K2</div><div class="chk-tag">morgens</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Vitamin B6 (P5P)</div><div class="chk-tag">morgens</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">L-Tyrosin</div><div class="chk-tag">vor Einnahme</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Rhodiola Rosea</div><div class="chk-tag">morgens</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Nattokinase</div><div class="chk-tag">nüchtern</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Elektrolyte</div></div>
+      <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Protein-Shake</div><div class="chk-tag">morgens</div></div>
+    </div>
+
+    <button class="btn-save" onclick="saveDay()">☀️ Morgen-Eintrag speichern</button>
+
+    <!-- ABEND SEKTION -->
+    <div style="margin-top:10px; border-top: 1px solid var(--border); padding-top: 6px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0 4px;cursor:pointer" onclick="toggleAbend()">
+        <span style="font-size:15px;font-weight:500;color:var(--text)">🌙 Abend-Nachtrag</span>
+        <span id="abend-toggle-icon" style="font-size:12px;color:var(--text-muted)">▼ ausklappen</span>
+      </div>
+    </div>
+
+    <div id="abend-section" style="display:none">
+      <div class="card">
+        <div class="card-title">Wirkungsende & Abend</div>
+        <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Wirkung gut abgeklungen</div></div>
+        <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Rebound / Stimmungstief abends</div></div>
+        <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Schlafen fällt schwer</div></div>
+        <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Appetit abends zurückgekehrt</div></div>
+        <div class="check-row" onclick="toggle(this)"><div class="chk"></div><div class="chk-label">Magnesium eingenommen</div><div class="chk-tag">abends</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Abend-Stimmung</div>
+        <div class="mood-grid">
+          <button class="mood-btn" onclick="setMoodAbend(this,1)"><span class="mood-emoji">😞</span><span class="mood-label">Schlecht</span></button>
+          <button class="mood-btn" onclick="setMoodAbend(this,2)"><span class="mood-emoji">😐</span><span class="mood-label">Ok</span></button>
+          <button class="mood-btn" onclick="setMoodAbend(this,3)"><span class="mood-emoji">🙂</span><span class="mood-label">Gut</span></button>
+          <button class="mood-btn" onclick="setMoodAbend(this,4)"><span class="mood-emoji">😄</span><span class="mood-label">Sehr gut</span></button>
+        </div>
+        <div style="margin-top:14px;">
+          <div class="scale-row"><div class="scale-name">Schlafqualität</div><input type="range" min="1" max="10" value="5" step="1" oninput="document.getElementById('va').textContent=this.value"><div class="scale-val" id="va">5</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Abend-Notizen</div>
+        <textarea id="notes-abend" placeholder="Wie war der Tag insgesamt? Besonderheiten am Abend..."></textarea>
+      </div>
+
+      <button class="btn-save" style="background:var(--text)" onclick="saveAbend()">🌙 Abend-Nachtrag speichern</button>
+    </div>
   </div>
 
   <!-- HISTORY -->
@@ -325,7 +381,49 @@ function load() {
 }
 load();
 
+// Init date
+const todayStr = new Date().toISOString().split('T')[0];
+document.getElementById('entry-date').value = todayStr;
 document.getElementById('date-badge').textContent = new Date().toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
+
+function onDateChange() {
+  const val = document.getElementById('entry-date').value;
+  if (!val) return;
+  const d = new Date(val + 'T12:00:00');
+  const label = d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
+  document.getElementById('date-badge').textContent = label;
+  // Load existing entry for that date if exists
+  const existing = entries.find(e => e.date === val);
+  if (existing) {
+    if (confirm('Eintrag für ' + label + ' existiert bereits. Laden?')) {
+      loadEntry(existing);
+    }
+  }
+}
+
+function loadEntry(e) {
+  // Reset all checks
+  document.querySelectorAll('.check-row').forEach(row => {
+    row.querySelector('.chk').classList.remove('on');
+    row.querySelector('.chk-label').classList.remove('on');
+  });
+  // Restore mood
+  selectedMood = e.mood || 0;
+  document.querySelectorAll('.mood-btn').forEach((b,i) => b.classList.toggle('on', i+1 === e.mood));
+  // Restore sliders
+  const setSlider = (id, valId, val) => { const el = document.querySelector('input[oninput*=' + id + ']'); if(el){el.value=val; document.getElementById(id).textContent=val;} };
+  document.querySelectorAll('input[type=range]').forEach(s => {
+    if(s.getAttribute('oninput').includes('vk')) { s.value = e.konz||5; document.getElementById('vk').textContent = e.konz||5; }
+    if(s.getAttribute('oninput').includes('ve')) { s.value = e.energie||5; document.getElementById('ve').textContent = e.energie||5; }
+    if(s.getAttribute('oninput').includes('vs')) { s.value = e.stimmung||5; document.getElementById('vs').textContent = e.stimmung||5; }
+  });
+  // Restore notes
+  document.getElementById('notes-input').value = e.notes || '';
+  // Restore einnahme time
+  if(e.einnahmezeit) document.getElementById('einnahme-time').value = e.einnahmezeit;
+  if(e.puls) document.getElementById('puls-input').value = e.puls;
+  showToast('Eintrag geladen ✓');
+}
 
 function showTab(name) {
   ['today','history','settings'].forEach(t => {
@@ -369,14 +467,14 @@ function setMood(btn, val) {
 }
 
 function saveDay() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = document.getElementById('entry-date').value || new Date().toISOString().split('T')[0];
   const checks = [...document.querySelectorAll('.check-row')].map(r => ({
     label: r.querySelector('.chk-label').textContent,
     checked: r.querySelector('.chk').classList.contains('on')
   }));
   const entry = {
     date: today,
-    dateLabel: new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }),
+    dateLabel: new Date(today + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }),
     mood: selectedMood,
     moodLabel: MOODLABELS[selectedMood] || '–',
     konz: document.getElementById('vk').textContent,
@@ -405,7 +503,8 @@ function renderHistory() {
     return `<div class="h-entry">
       <div class="h-date">${e.dateLabel || e.date}</div>
       <div class="h-row">
-        ${e.moodLabel ? `<span class="h-pill h-green">${e.moodLabel}</span>` : ''}
+        ${e.moodLabel ? `<span class="h-pill h-green">☀️ ${e.moodLabel}</span>` : ''}
+        ${e.moodAbendLabel && e.moodAbendLabel !== '–' ? `<span class="h-pill h-green">🌙 ${e.moodAbendLabel}</span>` : ''}
         ${e.einnahmezeit ? `<span class="h-pill h-gray">⏰ ${e.einnahmezeit} Uhr</span>` : ''}
         <span class="h-pill h-gray">Konz. ${e.konz}/10</span>
         <span class="h-pill h-gray">Energie ${e.energie}/10</span>
@@ -479,6 +578,48 @@ async function openFazit() {
 
 function closeFazit() { document.getElementById('modal').classList.remove('open'); }
 function closeModalOutside(e) { if (e.target === document.getElementById('modal')) closeFazit(); }
+
+// Abend section
+let selectedMoodAbend = 0;
+
+function toggleAbend() {
+  const sec = document.getElementById('abend-section');
+  const icon = document.getElementById('abend-toggle-icon');
+  const isHidden = sec.style.display === 'none';
+  sec.style.display = isHidden ? '' : 'none';
+  icon.textContent = isHidden ? '▲ einklappen' : '▼ ausklappen';
+}
+
+function setMoodAbend(btn, val) {
+  document.querySelectorAll('#abend-section .mood-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  selectedMoodAbend = val;
+}
+
+function saveAbend() {
+  const date = document.getElementById('entry-date').value || new Date().toISOString().split('T')[0];
+  const abendChecks = [...document.querySelectorAll('#abend-section .check-row')].map(r => ({
+    label: r.querySelector('.chk-label').textContent,
+    checked: r.querySelector('.chk').classList.contains('on')
+  }));
+  const abendData = {
+    moodAbend: selectedMoodAbend,
+    moodAbendLabel: MOODLABELS[selectedMoodAbend] || '–',
+    schlaf: document.getElementById('va').textContent,
+    notesAbend: document.getElementById('notes-abend').value.trim(),
+    abendChecks
+  };
+  // Merge into existing entry or create new
+  const idx = entries.findIndex(e => e.date === date);
+  if (idx >= 0) {
+    entries[idx] = { ...entries[idx], ...abendData };
+  } else {
+    const d = new Date(date + 'T12:00:00');
+    entries.unshift({ date, dateLabel: d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }), ...abendData });
+  }
+  try { localStorage.setItem('elvanse_v2', JSON.stringify(entries)); } catch(e) {}
+  showToast('Abend-Nachtrag gespeichert ✓');
+}
 </script>
 </body>
 </html>
