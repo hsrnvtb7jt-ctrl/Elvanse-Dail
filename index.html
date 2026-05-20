@@ -369,6 +369,20 @@ if ('serviceWorker' in navigator) {
 
 <div class="toast" id="toast"></div>
 
+<!-- ENTRY DETAIL MODAL -->
+<div class="modal-overlay" id="entry-modal" onclick="closeEntryModalOutside(event)">
+  <div class="modal" style="max-height:90vh">
+    <div class="modal-handle"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="modal-title" id="entry-modal-title" style="margin-bottom:0"></div>
+      <button onclick="deleteEntry()" style="font-size:12px;color:#A32D2D;background:none;border:0.5px solid rgba(163,45,45,0.3);border-radius:8px;padding:5px 10px;font-family:'DM Sans',sans-serif;cursor:pointer">Löschen</button>
+    </div>
+    <div id="entry-modal-body"></div>
+    <button class="btn-save" onclick="saveEntryModal()" style="margin-top:14px">Änderungen speichern</button>
+    <button class="modal-close" onclick="closeEntryModal()">Schließen</button>
+  </div>
+</div>
+
 <script>
 const MOODLABELS = ['','Schlecht','Ok','Gut','Sehr gut'];
 let selectedMood = 0;
@@ -497,22 +511,25 @@ function renderHistory() {
     list.innerHTML = '<div class="empty-state">Noch keine Einträge.<br>Fülle heute deinen ersten Tag aus!</div>';
     return;
   }
-  list.innerHTML = entries.map(e => {
+  list.innerHTML = entries.map((e, idx) => {
     const nw = (e.checks||[]).filter(c => c.checked && ['Herzrasen','Kopfschmerzen','Schlafprob','Appetit','Mundtrocken','Rebound'].some(k => c.label.includes(k))).length;
     const done = (e.checks||[]).filter(c=>c.checked).length;
-    return `<div class="h-entry">
-      <div class="h-date">${e.dateLabel || e.date}</div>
+    return `<div class="h-entry" onclick="openEntryModal(${idx})" style="cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div class="h-date">${e.dateLabel || e.date}</div>
+        <span style="font-size:11px;color:var(--green)">bearbeiten ›</span>
+      </div>
       <div class="h-row">
         ${e.moodLabel ? `<span class="h-pill h-green">☀️ ${e.moodLabel}</span>` : ''}
         ${e.moodAbendLabel && e.moodAbendLabel !== '–' ? `<span class="h-pill h-green">🌙 ${e.moodAbendLabel}</span>` : ''}
         ${e.einnahmezeit ? `<span class="h-pill h-gray">⏰ ${e.einnahmezeit} Uhr</span>` : ''}
-        <span class="h-pill h-gray">Konz. ${e.konz}/10</span>
-        <span class="h-pill h-gray">Energie ${e.energie}/10</span>
+        ${e.konz ? `<span class="h-pill h-gray">Konz. ${e.konz}/10</span>` : ''}
+        ${e.energie ? `<span class="h-pill h-gray">Energie ${e.energie}/10</span>` : ''}
         ${e.puls ? `<span class="h-pill h-amber">♥ ${e.puls} bpm</span>` : ''}
-        ${nw > 0 ? `<span class="h-pill h-amber">${nw} Nebenwirkung${nw>1?'en':''}</span>` : ''}
+        ${nw > 0 ? `<span class="h-pill h-amber">${nw} NW</span>` : ''}
         <span class="h-pill h-gray">${done} Checks</span>
       </div>
-      ${e.notes ? `<div class="h-notes">${e.notes.slice(0,120)}${e.notes.length>120?'…':''}</div>` : ''}
+      ${e.notes ? `<div class="h-notes">${e.notes.slice(0,100)}${e.notes.length>100?'…':''}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -578,6 +595,150 @@ async function openFazit() {
 
 function closeFazit() { document.getElementById('modal').classList.remove('open'); }
 function closeModalOutside(e) { if (e.target === document.getElementById('modal')) closeFazit(); }
+
+// Entry detail modal
+let editingIdx = -1;
+let editMoodVal = 0;
+let editMoodAbendVal = 0;
+
+function openEntryModal(idx) {
+  editingIdx = idx;
+  const e = entries[idx];
+  editMoodVal = e.mood || 0;
+  editMoodAbendVal = e.moodAbend || 0;
+
+  document.getElementById('entry-modal-title').textContent = e.dateLabel || e.date;
+
+  const checks = e.checks || [];
+  const abendChecks = e.abendChecks || [];
+
+  const checksHTML = checks.length ? `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Checkboxen</div>
+      ${checks.map((c,i) => `
+        <div class="check-row" onclick="toggleEditCheck(this)" data-ci="${i}" style="cursor:pointer">
+          <div class="chk ${c.checked?'on':''}"></div>
+          <div class="chk-label ${c.checked?'on':''}">${c.label}</div>
+        </div>`).join('')}
+    </div>` : '';
+
+  const moodBtns = ['😞 Schlecht','😐 Ok','🙂 Gut','😄 Sehr gut'].map((m,i) => 
+    `<button class="mood-btn ${editMoodVal===i+1?'on':''}" onclick="setEditMood(this,${i+1})"><span class="mood-emoji">${m.split(' ')[0]}</span><span class="mood-label">${m.split(' ')[1]}</span></button>`
+  ).join('');
+
+  const moodAbendBtns = ['😞 Schlecht','😐 Ok','🙂 Gut','😄 Sehr gut'].map((m,i) => 
+    `<button class="mood-btn ${editMoodAbendVal===i+1?'on':''}" onclick="setEditMoodAbend(this,${i+1})"><span class="mood-emoji">${m.split(' ')[0]}</span><span class="mood-emoji">${m.split(' ')[0]}</span><span class="mood-label">${m.split(' ')[1]}</span></button>`
+  ).join('');
+
+  const abendHTML = abendChecks.length ? `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">🌙 Abend</div>
+      ${abendChecks.map((c,i) => `
+        <div class="check-row" onclick="toggleEditAbendCheck(this)" data-ai="${i}" style="cursor:pointer">
+          <div class="chk ${c.checked?'on':''}"></div>
+          <div class="chk-label ${c.checked?'on':''}">${c.label}</div>
+        </div>`).join('')}
+      <div style="margin-top:10px">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">Abend-Stimmung</div>
+        <div class="mood-grid" id="edit-mood-abend-grid">${moodAbendBtns}</div>
+      </div>
+      <div style="margin-top:10px">
+        <div class="scale-row"><div class="scale-name">Schlafqualität</div><input type="range" min="1" max="10" value="${e.schlaf||5}" step="1" id="edit-schlaf" oninput="document.getElementById('edit-schlaf-val').textContent=this.value"><div class="scale-val" id="edit-schlaf-val">${e.schlaf||5}</div></div>
+      </div>
+      <div style="margin-top:10px">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Abend-Notizen</div>
+        <textarea id="edit-notes-abend" style="width:100%;border:0.5px solid var(--border-med);border-radius:8px;padding:8px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;resize:none;min-height:60px">${e.notesAbend||''}</textarea>
+      </div>
+    </div>` : '';
+
+  document.getElementById('entry-modal-body').innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">☀️ Stimmung</div>
+      <div class="mood-grid" id="edit-mood-grid">${moodBtns}</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Skalen</div>
+      <div class="scale-row"><div class="scale-name">Konzentration</div><input type="range" min="1" max="10" value="${e.konz||5}" id="edit-konz" step="1" oninput="document.getElementById('edit-konz-val').textContent=this.value"><div class="scale-val" id="edit-konz-val">${e.konz||5}</div></div>
+      <div class="scale-row"><div class="scale-name">Energie</div><input type="range" min="1" max="10" value="${e.energie||5}" id="edit-energie" step="1" oninput="document.getElementById('edit-energie-val').textContent=this.value"><div class="scale-val" id="edit-energie-val">${e.energie||5}</div></div>
+      <div class="scale-row"><div class="scale-name">Stimmung</div><input type="range" min="1" max="10" value="${e.stimmung||5}" id="edit-stimmung" step="1" oninput="document.getElementById('edit-stimmung-val').textContent=this.value"><div class="scale-val" id="edit-stimmung-val">${e.stimmung||5}</div></div>
+      ${e.einnahmezeit ? `<div class="scale-row"><div class="scale-name">Einnahme</div><input type="time" id="edit-einnahme" value="${e.einnahmezeit}" style="border:0.5px solid var(--border-med);border-radius:6px;padding:3px 7px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;"><div class="scale-val"></div></div>` : ''}
+      ${e.puls ? `<div class="scale-row"><div class="scale-name">Puls</div><input type="number" id="edit-puls" value="${e.puls}" min="40" max="220" style="width:62px;border:0.5px solid var(--border-med);border-radius:6px;padding:3px 7px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;"><div class="scale-val" style="font-size:11px;color:var(--text-faint)">bpm</div></div>` : ''}
+    </div>
+    ${checksHTML}
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--text-faint);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px">Notizen</div>
+      <textarea id="edit-notes" style="width:100%;border:0.5px solid var(--border-med);border-radius:8px;padding:8px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;resize:none;min-height:80px">${e.notes||''}</textarea>
+    </div>
+    ${abendHTML}
+  `;
+
+  document.getElementById('entry-modal').classList.add('open');
+}
+
+function toggleEditCheck(row) {
+  row.querySelector('.chk').classList.toggle('on');
+  row.querySelector('.chk-label').classList.toggle('on');
+}
+function toggleEditAbendCheck(row) { toggleEditCheck(row); }
+
+function setEditMood(btn, val) {
+  document.querySelectorAll('#edit-mood-grid .mood-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  editMoodVal = val;
+}
+function setEditMoodAbend(btn, val) {
+  document.querySelectorAll('#edit-mood-abend-grid .mood-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  editMoodAbendVal = val;
+}
+
+function saveEntryModal() {
+  if (editingIdx < 0) return;
+  const e = entries[editingIdx];
+
+  // Save checks
+  document.querySelectorAll('#entry-modal-body [data-ci]').forEach(row => {
+    const i = parseInt(row.dataset.ci);
+    e.checks[i].checked = row.querySelector('.chk').classList.contains('on');
+  });
+  document.querySelectorAll('#entry-modal-body [data-ai]').forEach(row => {
+    const i = parseInt(row.dataset.ai);
+    e.abendChecks[i].checked = row.querySelector('.chk').classList.contains('on');
+  });
+
+  e.mood = editMoodVal;
+  e.moodLabel = MOODLABELS[editMoodVal] || '–';
+  e.moodAbend = editMoodAbendVal;
+  e.moodAbendLabel = MOODLABELS[editMoodAbendVal] || '–';
+  e.konz = document.getElementById('edit-konz')?.value || e.konz;
+  e.energie = document.getElementById('edit-energie')?.value || e.energie;
+  e.stimmung = document.getElementById('edit-stimmung')?.value || e.stimmung;
+  e.notes = document.getElementById('edit-notes')?.value || '';
+  if (document.getElementById('edit-einnahme')) e.einnahmezeit = document.getElementById('edit-einnahme').value;
+  if (document.getElementById('edit-puls')) e.puls = document.getElementById('edit-puls').value;
+  if (document.getElementById('edit-schlaf')) e.schlaf = document.getElementById('edit-schlaf').value;
+  if (document.getElementById('edit-notes-abend')) e.notesAbend = document.getElementById('edit-notes-abend').value;
+
+  try { localStorage.setItem('elvanse_v2', JSON.stringify(entries)); } catch(err) {}
+  showToast('Eintrag gespeichert ✓');
+  closeEntryModal();
+  renderHistory();
+}
+
+function deleteEntry() {
+  if (editingIdx < 0) return;
+  const e = entries[editingIdx];
+  if (confirm('Eintrag für ' + (e.dateLabel || e.date) + ' wirklich löschen?')) {
+    entries.splice(editingIdx, 1);
+    try { localStorage.setItem('elvanse_v2', JSON.stringify(entries)); } catch(err) {}
+    closeEntryModal();
+    renderHistory();
+    showToast('Eintrag gelöscht');
+  }
+}
+
+function closeEntryModal() { document.getElementById('entry-modal').classList.remove('open'); editingIdx = -1; }
+function closeEntryModalOutside(e) { if (e.target === document.getElementById('entry-modal')) closeEntryModal(); }
 
 // Abend section
 let selectedMoodAbend = 0;
